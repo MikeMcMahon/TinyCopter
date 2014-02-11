@@ -1,6 +1,11 @@
+# Created by http://www.gitignore.io
+
+### C ###
 # Object files
 *.o
 *.ko
+*.obj
+*.elf
 
 # Libraries
 *.lib
@@ -16,3 +21,46 @@
 *.exe
 *.out
 *.app
+*.i*86
+*.x86_64
+*.hex
+
+
+### C++ ###
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+### CodeBlocks ###
+## Ignore CodeBlocks layout and depends file
+
+*.depend
+*.layout
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+x64/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
