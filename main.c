@@ -20,11 +20,13 @@ const int window_width = 250;
 const int window_height = 140;
 const float TERM_VELOCITY_UP = -2;
 const float TERM_VELOCITY_DOWN = 2;
-const float DOWN_VELOCITY = 0.04;
+const float DOWN_VELOCITY = 0.05;
 const float UP_VELOCITY = 0.06;
+const float PIPE_ACCELERATION = 0.06;
 
 #ifdef DEBUG
-const char* GAME_FONT_FILE = "E:\\Development\\dependencies\\fonts\\PressStart2P-Regular.ttf";
+const char* GAME_FONT_FILE =
+        "E:\\Development\\dependencies\\fonts\\PressStart2P-Regular.ttf";
 #else
 const char* GAME_FONT_FILE = "PressStart2P-Regular.ttf"
 #endif
@@ -51,11 +53,11 @@ struct TinyCopter
 
 struct Pipe
 {
-        int x;
+        float x;
         int y;
         int h;
         int w;
-        SDL_Surface *surface;
+        float velocity;
 };
 
 SDL_Rect SDL_CreateRect(int x, int y, int h, int w)
@@ -94,12 +96,24 @@ SDL_Surface * SDL_Create32BitSurface(int w, int h)
 }
 
 /**
+ * Initializes the pipe with some defaults
+ */
+void Pipe_Init(struct Pipe *pipe, struct Scene *scene)
+{
+        pipe->x = scene->w;
+        pipe->y = 0;
+        pipe->w = 24;
+        pipe->h = 100;
+        pipe->velocity = 2;
+}
+
+/**
  * translates the pipes along the page to the left
  * returns non-zero if wrapped the screen
  */
 int Pipe_Move(struct Pipe *pipe, struct Scene *scene)
 {
-        pipe->x--;
+        pipe->x -= pipe->velocity;
         if (pipe->x + pipe->w < 0) {
                 pipe->x = scene->w;
                 return 1;
@@ -108,53 +122,32 @@ int Pipe_Move(struct Pipe *pipe, struct Scene *scene)
 }
 
 /**
+ * Renders the pipe with interpolation, returns the drawn position
+ */
+SDL_Rect Pipe_Render(float p, struct Pipe *pipe, SDL_Surface *surface)
+{
+        SDL_Rect pipe_rect = SDL_CreateRect(pipe->x, pipe->y,
+                                            pipe->h, pipe->w);
+
+        //pipe_rect.x += (pipe->x - old_x) * p;
+
+        SDL_FillRect(surface, &pipe_rect,
+                     SDL_MapRGBA(surface->format, 0, 255, 0, 255));
+
+        return pipe_rect;
+}
+
+/**
  * Generates a new set of top/bottom pipes when they translate off the page
  */
-void Pipe_Update(struct Pipe *top, struct Pipe *bottom, struct Scene *scene)
+void Pipe_Generate(struct Pipe *top, struct Pipe *bottom, struct Scene *scene)
 {
-        SDL_Rect pipe_rect;
-        top->h = (rand() % (scene->h - 30)) + 30;
-
-        SDL_FillRect(top->surface, NULL,
-                     SDL_MapRGBA(top->surface->format, 0, 0, 0, 0));
-        SDL_FillRect(bottom->surface, NULL,
-                     SDL_MapRGBA(bottom->surface->format, 0, 0, 0, 0));
-
-        // top pipe
-        pipe_rect.h = top->h;
-        pipe_rect.w = 18;
-        pipe_rect.x = 6;
-        pipe_rect.y = 0;
-        SDL_FillRect(top->surface, &pipe_rect,
-                     SDL_MapRGBA(top->surface->format, 0, 255, 0, 255));
-
-        pipe_rect.w = 30;
-        pipe_rect.h = 16;
-        pipe_rect.y = top->h - 16;
-        pipe_rect.x = 0;
-        SDL_FillRect(top->surface, &pipe_rect,
-                     SDL_MapRGBA(top->surface->format, 0, 255, 0, 255));
-
-        // bottom pipe
-        int remainder = scene->h - top->h;
-        int size = (rand() % remainder) + 30;
-        if (size + top->h > scene->h)
-                size = 0;
-
-        bottom->h = size; //(rand() % ((scene.h - pipe_top.h) + 35));
-        pipe_rect.h = bottom->h;
-        pipe_rect.w = 18;
-        pipe_rect.x = 6;
-        pipe_rect.y = 0; //scene->h - bottom->h;
-        SDL_FillRect(bottom->surface, &pipe_rect,
-                     SDL_MapRGBA(bottom->surface->format, 0, 255, 0, 255));
-
-        pipe_rect.w = 30;
-        pipe_rect.h = 16;
-        pipe_rect.x = 0;
-        SDL_FillRect(botom->surface, &pipe_rect,
-                     SDL_MapRGBA(bottom->surface->format, 0, 255, 0, 255));
-
+        int gap = (rand() % 30) + 30;
+        int offset = (float) (scene->h - gap) * ((float)(rand() % 100) / 100.0);
+        printf("GAP: %d OFFSET: %d\n", gap, offset);
+        top->h = offset;
+        bottom->y = gap + offset;
+        bottom->h = scene->h - (gap + offset);
 }
 
 /**
@@ -175,24 +168,65 @@ void TC_Descend(struct TinyCopter *tinycopter)
                 tinycopter->velocity += DOWN_VELOCITY;
 }
 
+void TC_Init(struct TinyCopter *tc, struct Scene *scene)
+{
+        tc->x = 40;
+        tc->y = (scene->h / 2) - 16;
+        tc->h = 16;
+        tc->w = 20;
+        tc->velocity = 0;
+}
+
+int Pipe_Collision(struct Pipe *top, struct Pipe *bottom, struct TinyCopter *tc)
+{
+        SDL_Rect tc_hitbox;
+        SDL_Rect pipe_hitbox;
+
+        tc_hitbox.x = tc->x;
+        tc_hitbox.y = tc->y;
+        tc_hitbox.h = tc->h;
+        tc_hitbox.w = tc->w;
+
+        pipe_hitbox.x = top->x,
+        pipe_hitbox.y = top->y;
+        pipe_hitbox.h = top->h;
+        pipe_hitbox.w = top->w;
+        if (SDL_HasIntersection(&tc_hitbox, &pipe_hitbox) == SDL_TRUE)
+                return 1;
+
+        pipe_hitbox.x = bottom->x,
+        pipe_hitbox.y = bottom->y;
+        pipe_hitbox.h = bottom->h;
+        pipe_hitbox.w = bottom->w;
+
+        if (SDL_HasIntersection(&tc_hitbox, &pipe_hitbox) == SDL_TRUE)
+                return 1;
+        return 0;
+}
+
 int main(int argc, char* argv[])
 {
         int quit = 0;
         SDL_Event e;
         struct Scene scene;
+        struct TinyCopter tinycopter;
+        struct Pipe pipe_top;
+        struct Pipe pipe_bottom;
         unsigned int previous;
         unsigned int current = 0;
         float lag = 0;
         unsigned int elapsed = 0;
         float frames_per_second = 60;
         float ms_per_update = (1000 / frames_per_second);
-        float interpolation;
-        struct TinyCopter tinycopter;
-        struct Pipe pipe_top;
-        struct Pipe pipe_bottom;
+        int do_generate;
         SDL_Rect draw_rect;
-        SDL_Rect pipe_top_rect;
-        SDL_Rect pipe_bottom_rect;
+        TTF_Font *game_font;
+
+        // Score handling
+        int score = 0;
+        char score_display[4];
+        SDL_Color score_color;
+        SDL_Surface *score_surf;
 
         srand(time(NULL));
 
@@ -201,6 +235,8 @@ int main(int argc, char* argv[])
 
         if (TTF_Init() != 0)
                 return (DEBUG_MSG(TTF_GetError()), -1);
+
+        game_font = TTF_OpenFont(GAME_FONT_FILE, 16);
 
         scene.w = window_width;
         scene.h = window_height;
@@ -237,42 +273,25 @@ int main(int argc, char* argv[])
         if (tinycopter.surface == NULL)
                 return (DEBUG_MSG(SDL_GetError()), -1);
 
-        /*
-         * Configuring the TinyCopter..
-         */
-        tinycopter.x = 40;
-        tinycopter.y = (scene.h / 2) - 16;
-        tinycopter.h = 16;
-        tinycopter.w = 20;
-        tinycopter.velocity = 0;
+        TC_Init(&tinycopter, &scene);
 
-        draw_rect.x = 40;
-        draw_rect.y = tinycopter.y;
-        draw_rect.h = 16;
-        draw_rect.w = 20;
 
         /**
          * Setup the TOP PIPE
          */
-        pipe_top.x = 140;
-        pipe_top.y = 0;
-        pipe_top.w = 30;
-        pipe_top.surface = SDL_Create32BitSurface(30, scene.h);
-
-        if (pipe_top.surface == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
-
-
-        pipe_bottom.x = 140;
-        pipe_bottom.w = 30;
-        pipe_bottom.surface = SDL_Create32BitSurface(30, scene.h);
-
-        if (pipe_bottom.surface == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
-
-        Pipe_Update(&pipe_top, &pipe_bottom, &scene);
+        Pipe_Init(&pipe_top, &scene);
+        Pipe_Init(&pipe_bottom, &scene);
+        Pipe_Generate(&pipe_top, &pipe_bottom, &scene);
         pipe_bottom.y = scene.h - pipe_bottom.h;
 
+        // setup the score
+        score_color.a = 255;
+        score_color.r = 0;
+        score_color.g = 0;
+        score_color.b = 0;
+        sprintf(score_display, "%d", score);
+        score_surf = TTF_RenderText_Blended(game_font, score_display,
+                               score_color);
 
         previous = SDL_GetTicks();
         while (!quit) {
@@ -288,6 +307,8 @@ int main(int argc, char* argv[])
                         if (e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
                                 quit = -1;
 
+
+                //pipe_old_x = pipe_top.x;
                 while (lag >= ms_per_update)
                 {
                         if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
@@ -298,43 +319,67 @@ int main(int argc, char* argv[])
 
                         tinycopter.y += tinycopter.velocity;
 
-                        if (Pipe_Move(&pipe_bottom, &scene) != 0 ||
-                            Pipe_Move(&pipe_top, &scene) != 0)
-                            Pipe_Update(&pipe_top, &pipe_bottom, &scene);
+                        do_generate = Pipe_Move(&pipe_top, &scene);
+                        Pipe_Move(&pipe_bottom, &scene);
+                        if (do_generate) {
+                                Pipe_Generate(&pipe_top, &pipe_bottom, &scene);
+                                pipe_top.velocity += PIPE_ACCELERATION;
+                                pipe_bottom.velocity += PIPE_ACCELERATION;
+                                score++;
+                                sprintf(score_display, "%d", score);
+                                score_surf = TTF_RenderText_Blended(
+                                                        game_font,
+                                                        score_display,
+                                                        score_color);
+                        }
 
+
+                        if (Pipe_Collision(&pipe_top, &pipe_bottom, &tinycopter) != 0 ||
+                            tinycopter.y < 0 ||
+                            tinycopter.y > scene.h) {
+                                // reset score counter
+                                TC_Init(&tinycopter, &scene);
+                                score = 0;
+                                Pipe_Init(&pipe_top, &scene);
+                                Pipe_Init(&pipe_bottom, &scene);
+
+                                sprintf(score_display, "%d", score);
+                                score_surf = TTF_RenderText_Blended(
+                                                        game_font,
+                                                        score_display,
+                                                        score_color);
+                        }
 
                         lag -= ms_per_update;
                 }
 
-                interpolation = lag / ms_per_update;
-                draw_rect.x = tinycopter.x;
-                //float polated = (float)(draw_rect.y - tinycopter.y) * interpolation;
-                draw_rect.y = tinycopter.y;
-
-                pipe_top_rect = SDL_CreateRect(pipe_top.x, pipe_top.y, pipe_top.h, pipe_top.w);
-                pipe_bottom_rect = SDL_CreateRect(pipe_bottom.x, pipe_bottom.y, pipe_bottom.h, pipe_bottom.w);
-
-                draw_rect.h = tinycopter.h;
-                draw_rect.w = tinycopter.w;
-
                 SDL_RenderClear(scene.renderer);
+                draw_rect = SDL_CreateRect(
+                                   tinycopter.x,
+                                   tinycopter.y,
+                                   tinycopter.h,
+                                   tinycopter.w);
 
                 /** RENDER HERE **/
                 SDL_FillRect(scene.surface, NULL,
                              SDL_MapRGBA(scene.surface->format, 255, 255, 255, 255));
 
-                SDL_BlitSurface(pipe_top.surface, NULL, scene.surface, &pipe_top_rect);
-                SDL_BlitSurface(pipe_bottom.surface, NULL, scene.surface, &pipe_bottom_rect);
+                Pipe_Render(0, &pipe_top, scene.surface);
+                Pipe_Render(0, &pipe_bottom, scene.surface);
+
                 SDL_BlitSurface(tinycopter.surface, NULL, scene.surface, &draw_rect);
 
+                draw_rect.x = (scene.w / 2) - (score_surf->w / 2);
+                draw_rect.y = 5;
+                draw_rect.h = score_surf->h;
+                draw_rect.w = score_surf->w;
+                SDL_BlitScaled(score_surf, NULL, scene.surface, &draw_rect);
                 SDL_UpdateTexture(scene.texture, NULL, scene.surface->pixels, scene.surface->pitch);
                 SDL_RenderCopy(scene.renderer, scene.texture, NULL, NULL);
                 SDL_RenderPresent(scene.renderer);
 
         }
 
-        SDL_FreeSurface(pipe_top.surface);
-        SDL_FreeSurface(pipe_bottom.surface);
         SDL_FreeSurface(tinycopter.surface);
         SDL_FreeSurface(scene.surface);
         SDL_DestroyTexture(scene.texture);
