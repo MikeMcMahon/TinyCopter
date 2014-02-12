@@ -8,9 +8,21 @@
 #include "SDL2/SDL_ttf.h"
 
 #ifdef DEBUG
-#define DEBUG_MSG(X) printf("Occurred: %s, at line %d in %s\n", X, __LINE__, __FILE__)
+#define DEBUG_ERR(X) \
+        do { \
+                printf("ERR: %s, at line %d in %s\n", X, __LINE__, __FILE__); \
+        } while (0)
+#define DEBUG_LOG(...) \
+        do { \
+                printf(__VA_ARGS__); \
+        } while (0)
 #else
-#define DEBUG_MSG(X) printf("")
+#define DEBUG_ERR(X) \
+        do { \
+        } while(0)
+#define DEBUG_LOG(...) \
+        do { \
+        } while(0)
 #endif
 
 
@@ -28,7 +40,7 @@ const float PIPE_ACCELERATION = 0.06;
 const char* GAME_FONT_FILE =
         "E:\\Development\\dependencies\\fonts\\PressStart2P-Regular.ttf";
 #else
-const char* GAME_FONT_FILE = "PressStart2P-Regular.ttf"
+const char* GAME_FONT_FILE = "PressStart2P-Regular.ttf";
 #endif
 
 struct Scene
@@ -89,8 +101,10 @@ SDL_Surface * SDL_Create32BitSurface(int w, int h)
 #endif
         surface = SDL_CreateRGBSurface(0, w, h, 32,
                                        rmask, gmask, bmask, amask);
-        if (surface == NULL)
-                return (DEBUG_MSG(SDL_GetError()), NULL);
+        if (surface == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return NULL;
+        }
 
         return surface;
 }
@@ -144,7 +158,7 @@ void Pipe_Generate(struct Pipe *top, struct Pipe *bottom, struct Scene *scene)
 {
         int gap = (rand() % 30) + 30;
         int offset = (float) (scene->h - gap) * ((float)(rand() % 100) / 100.0);
-        printf("GAP: %d OFFSET: %d\n", gap, offset);
+        DEBUG_LOG("GAP: %d OFFSET: %d\n", gap, offset);
         top->h = offset;
         bottom->y = gap + offset;
         bottom->h = scene->h - (gap + offset);
@@ -221,6 +235,7 @@ int main(int argc, char* argv[])
         int do_generate;
         SDL_Rect draw_rect;
         TTF_Font *game_font;
+        int go_up = 0;
 
         // Score handling
         int score = 0;
@@ -230,11 +245,15 @@ int main(int argc, char* argv[])
 
         srand(time(NULL));
 
-        if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
-                return (DEBUG_MSG(SDL_GetError()) -1);
+        if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
-        if (TTF_Init() != 0)
-                return (DEBUG_MSG(TTF_GetError()), -1);
+        if (TTF_Init() != 0) {
+                DEBUG_ERR(TTF_GetError());
+                return -1;
+        }
 
         game_font = TTF_OpenFont(GAME_FONT_FILE, 16);
 
@@ -248,30 +267,40 @@ int main(int argc, char* argv[])
                  scene.w,
                  scene.h,
                  SDL_WINDOW_SHOWN);
-        if (scene.window == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
+        if (scene.window == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
         scene.renderer = SDL_CreateRenderer(
                                     scene.window,
                                     -1,
                                     SDL_RENDERER_ACCELERATED);
-        if (scene.window == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
+        if (scene.window == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
         scene.surface = SDL_GetWindowSurface(scene.window);
-        if (scene.surface == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
+        if (scene.surface == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
         scene.texture = SDL_CreateTextureFromSurface(
                                              scene.renderer,
                                              scene.surface);
-        if (scene.texture == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
+        if (scene.texture == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
         IMG_Init(IMG_INIT_PNG);
         tinycopter.surface = IMG_Load("tinycopter.png");
-        if (tinycopter.surface == NULL)
-                return (DEBUG_MSG(SDL_GetError()), -1);
+        if (tinycopter.surface == NULL) {
+                DEBUG_ERR(SDL_GetError());
+                return -1;
+        }
 
         TC_Init(&tinycopter, &scene);
 
@@ -307,11 +336,17 @@ int main(int argc, char* argv[])
                         if (e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
                                 quit = -1;
 
+                if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        if (e.button.button & SDL_BUTTON_LEFT)
+                                go_up = 1;
+                } else {
+                        go_up = 0;
+                }
 
                 //pipe_old_x = pipe_top.x;
                 while (lag >= ms_per_update)
                 {
-                        if (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
+                        if (go_up) {
                                 TC_Ascend(&tinycopter);
                         } else {
                                 TC_Descend(&tinycopter);
